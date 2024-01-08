@@ -1,0 +1,89 @@
+
+# AWS S3 and Snowflake Integration
+
+## AWS Steps - Step 1
+
+1. **S3 Bucket Name:**
+   - s3://path/for/s3bucket/file.csv
+
+2. **Create IAM Role with S3 Full Access:**
+   - Create a role with S3 full access permissions.
+   - An ARN (Amazon Resource Name) will be generated when you create the role.
+
+## Snowflake Steps - Step 2
+
+1. **Show Database and Schema:**
+    ```sql
+    select current_database();
+    select current_schema();
+    ```
+
+2. **Create Storage Integration:**
+    ```sql
+    -- Creating a new storage integration object by specifying storage type, storage provider, etc.
+    
+    CREATE OR REPLACE STORAGE INTEGRATION sf_s3_intg
+    TYPE = EXTERNAL_STAGE
+    STORAGE_PROVIDER = 's3'  -- In Snowflake, AWS S3 bucket is referred to as 's3'
+    ENABLED = TRUE
+    STORAGE_AWS_ROLE_ARN = '<your-arn>'
+    STORAGE_ALLOWED_LOCATIONS = ('s3://path/for/s3bucket/file.csv');
+    
+    -- List created integrations
+    SHOW INTEGRATIONS;
+    
+    -- Get ARN and external ID for authentication at AWS
+    DESC INTEGRATION SF_S3_INTG;
+    ```
+
+## AWS Steps - Step 3
+
+1. **Update Trust Policy of IAM Role:**
+   - Update the trust policy of the IAM role created, including the ARN copied from Snowflake and the external ID.
+
+## Snowflake Steps - Step 4
+
+1. **Create File Format:**
+    ```sql
+    -- Creating file format
+    CREATE OR REPLACE FILE FORMAT sf_s3_2
+    TYPE = 'CSV'
+    FIELD_DELIMITER = ','
+    SKIP_HEADER = 1
+    EMPTY_FIELD_AS_NULL = TRUE;
+    ```
+
+2. **Create External Stage:**
+    ```sql
+    -- Creating external stage
+    CREATE OR REPLACE STAGE sf_s3_2
+    STORAGE_INTEGRATION = SF_S3_INTG
+    FILE_FORMAT = sf_s3_2
+    URL = 's3://path/for/s3bucket/file.csv';
+    
+    -- List files in the S3 bucket
+    LIST @sf_s3_2;
+    ```
+
+3. **Create Table and Load Data:**
+    ```sql
+    -- Creating a table with a similar schema to the S3 bucket
+    CREATE OR REPLACE TABLE patient_data
+    (
+        patient_id TEXT,
+        patient_name TEXT,
+        eff_date DATE,
+        patient_room TEXT,
+        patient_contact_number BIGINT
+    );
+    
+    -- Copying data from the stage into the table
+    COPY INTO patient_data 
+    FROM @sf_s3_2
+    PATTERN = '.*patient.*'
+    VALIDATION_MODE = RETURN_ALL_ERRORS; -- Provides details about errors
+    
+    -- Viewing/validating data in the table
+    SELECT * FROM patient_data;
+    ```
+
